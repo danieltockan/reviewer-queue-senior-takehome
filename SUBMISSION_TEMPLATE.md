@@ -43,6 +43,7 @@ Three coherent improvements, prioritised against the brief:
 - **Layout collapses on short queues.** The detail and list panels shrink with content. Cosmetic only; would add a viewport min-height.
 - **`/dev/reset` is unauthenticated.** Fine for the take-home; would gate behind dev-only routing in production.
 - **No optimistic update / loading state on action buttons.** Actions block via `pendingAction` but don't show a spinner. Acceptable for the timebox.
+- **Reviewers can act on items claimed by others.** The brief doesn't require ownership scoping — any `in_review` item accepts approve/reject/escalate regardless of which reviewer claimed it. In a real product I'd scope these actions to the assignee (and add a "reassign" affordance). Out of scope here per the brief.
 
 ## Files changed and why
 
