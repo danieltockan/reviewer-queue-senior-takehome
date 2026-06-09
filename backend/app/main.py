@@ -39,6 +39,18 @@ def load_seed_items() -> list[dict]:
 ITEMS = load_seed_items()
 
 
+# Centralised state machine: maps current status -> set of allowed actions.
+# Single source of truth for transitions. Any change to workflow rules
+# should happen here, not scattered across the route handler.
+ALLOWED_ACTIONS: dict[str, set[ReviewAction]] = {
+    "unassigned": {"claim"},
+    "in_review": {"approve", "reject", "escalate"},
+    "approved": set(),
+    "rejected": set(),
+    "escalated": set(),
+}
+
+
 @app.get("/health")
 async def health() -> dict:
     return {"status": "ok"}
@@ -71,18 +83,19 @@ async def get_review_item(item_id: str) -> dict:
 @app.post("/review-items/{item_id}/actions")
 async def apply_action(item_id: str, request: ActionRequest) -> dict:
     item = find_item(item_id)
+    current_status = item["status"]
+
+    if request.action not in ALLOWED_ACTIONS.get(current_status, set()):
+        raise HTTPException(
+            status_code=409,
+            detail=f"Action '{request.action}' is not allowed on an item with status '{current_status}'",
+        )
 
     if request.action == "claim":
-        if item["status"] in {"approved", "rejected", "escalated"}:
-            raise HTTPException(status_code=409, detail="This item cannot be claimed")
         item["status"] = "in_review"
         item["assigned_reviewer"] = request.reviewer
-    elif request.action in {"approve", "reject", "escalate"}:
-        if item["status"] == "approved":
-            raise HTTPException(status_code=409, detail="This item has already been approved")
-        item["status"] = status_for_action(request.action)
     else:
-        raise HTTPException(status_code=400, detail="Unsupported action")
+        item["status"] = status_for_action(request.action)
 
     return {"item": deepcopy(item)}
 
