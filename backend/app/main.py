@@ -39,9 +39,8 @@ def load_seed_items() -> list[dict]:
 ITEMS = load_seed_items()
 
 
-# Centralised state machine: maps current status -> set of allowed actions.
-# Single source of truth for transitions. Any change to workflow rules
-# should happen here, not scattered across the route handler.
+# TAKEHOME: State machine in one table so workflow rules are easy to find
+# and reason about. Empty sets = terminal states; no action permitted.
 ALLOWED_ACTIONS: dict[str, set[ReviewAction]] = {
     "unassigned": {"claim"},
     "in_review": {"approve", "reject", "escalate"},
@@ -49,6 +48,11 @@ ALLOWED_ACTIONS: dict[str, set[ReviewAction]] = {
     "rejected": set(),
     "escalated": set(),
 }
+
+
+RISK_PRIORITY = {"high": 0, "medium": 1, "low": 2}
+TIER_PRIORITY = {"priority": 0, "standard": 1}
+TERMINAL_STATUSES = {"approved", "rejected", "escalated"}
 
 
 @app.get("/health")
@@ -68,9 +72,17 @@ async def list_review_items(active_only: bool = True) -> dict:
     items = deepcopy(ITEMS)
 
     if active_only:
-        items = [item for item in items if item["status"] != "approved"]
+        items = [item for item in items if item["status"] not in TERMINAL_STATUSES]
 
-    items.sort(key=lambda item: item["submitted_at"], reverse=True)
+    # TAKEHOME: Python tuple sort compares left-to-right, so a single sort
+    # call with a 3-tuple key delivers the brief's ordering: risk first
+    # (high>medium>low), then customer tier (priority>standard), then age
+    # (older first). Lower numeric rank = more urgent.
+    items.sort(key=lambda item: (
+        RISK_PRIORITY.get(item["risk_level"], 99),
+        TIER_PRIORITY.get(item["customer_tier"], 99),
+        item["submitted_at"],
+    ))
     return {"items": items}
 
 
