@@ -19,6 +19,12 @@ const ALLOWED_ACTIONS: Record<ReviewStatus, ReadonlySet<ReviewAction>> = {
   escalated: new Set()
 };
 
+const TERMINAL_STATUSES: ReadonlySet<ReviewStatus> = new Set([
+  "approved",
+  "rejected",
+  "escalated"
+]);
+
 // Display-only enum → human-readable label maps. These never mutate data.
 const STATUS_LABELS: Record<ReviewStatus, string> = {
   unassigned: "Unassigned",
@@ -50,10 +56,27 @@ const selectedItem = computed(() =>
   items.value.find((item) => item.id === selectedId.value) ?? items.value[0] ?? null
 );
 
+const isSelectedTerminal = computed(() =>
+  selectedItem.value ? TERMINAL_STATUSES.has(selectedItem.value.status) : false
+);
+
 function isActionAllowed(action: ReviewAction): boolean {
   const status = selectedItem.value?.status;
   if (!status) return false;
   return ALLOWED_ACTIONS[status].has(action);
+}
+
+function disabledReason(action: ReviewAction): string | null {
+  const status = selectedItem.value?.status;
+  if (!status) return null;
+  if (ALLOWED_ACTIONS[status].has(action)) return null;
+
+  // TAKEHOME: Per-status messages teach the workflow rather than just
+  // enforcing it. A reviewer learning the rules sees why a button is
+  // unavailable, not just that it is.
+  if (status === "unassigned") return "Claim this item first.";
+  if (status === "in_review") return "Already claimed — only approve, reject, or escalate are available.";
+  return `This item is ${STATUS_LABELS[status].toLowerCase()} and accepts no further actions.`;
 }
 
 async function loadItems() {
@@ -134,6 +157,10 @@ onMounted(loadItems);
           <span class="status-pill">{{ STATUS_LABELS[selectedItem.status] }}</span>
         </div>
 
+        <p v-if="isSelectedTerminal" class="terminal-note" role="status">
+          This item is {{ STATUS_LABELS[selectedItem.status].toLowerCase() }} and accepts no further actions.
+        </p>
+
         <dl class="facts">
           <div>
             <dt>Submitted</dt>
@@ -160,6 +187,7 @@ onMounted(loadItems);
           <button
             type="button"
             :disabled="Boolean(pendingAction) || !isActionAllowed('claim')"
+            :title="disabledReason('claim') ?? ''"
             @click="performAction('claim')"
           >
             Claim
@@ -167,6 +195,7 @@ onMounted(loadItems);
           <button
             type="button"
             :disabled="Boolean(pendingAction) || !isActionAllowed('approve')"
+            :title="disabledReason('approve') ?? ''"
             @click="performAction('approve')"
           >
             Approve
@@ -174,6 +203,7 @@ onMounted(loadItems);
           <button
             type="button"
             :disabled="Boolean(pendingAction) || !isActionAllowed('reject')"
+            :title="disabledReason('reject') ?? ''"
             @click="performAction('reject')"
           >
             Reject
@@ -181,6 +211,7 @@ onMounted(loadItems);
           <button
             type="button"
             :disabled="Boolean(pendingAction) || !isActionAllowed('escalate')"
+            :title="disabledReason('escalate') ?? ''"
             @click="performAction('escalate')"
           >
             Escalate
